@@ -1,0 +1,180 @@
+import pandas as pd
+import numpy as np
+import itertools
+import scipy.stats as st
+import statsmodels.api as sm
+
+#from pandas.core import datetools
+from patsy import dmatrices
+#读取数据
+data = pd.read_excel(
+    r""
+)
+data.columns = data.columns.str.lower()
+data['net_profit_inc'] = data["profit_net_2019"] / data['amount_ini']
+y_list = "staff_increase profit_time asset_net_increase "
+x_list = "mkt_mastery gov_ser_satisf platform_help gov_support zonghesuzhi_c1 zonghesuzhi_c2 bus_resistance b c d e f g h i i1 i2 k l m n "
+x_control_list = "firm_age amount_ini staff_rd_ini bus_age bus_backg firm_age amount_ini staff_ini staff_rd_ini bus_age bus_xueli bus_backg bus_zhicheng bus_shenfen bus_firstage"
+str_ini = y_list + x_list + x_control_list
+str_fin = str_ini.split(" ")
+vars = [str(i) for i in str_fin]
+
+df = data[vars]
+df['cons'] = data["profit_net_2019"] - data["profit_net_2019"] + 1
+
+df.head(5)
+
+
+#列举所有变量组合
+def str_out(
+        str_input="firm_age amount_ini staff_ini staff_rd_ini bus_age bus_backg"
+):
+    indlist = [i for i in str_input.split(' ')]
+    #print(indlist)
+    list_all_choice = []
+    for i in range(1, len(indlist) + 1):
+        for j in list(itertools.combinations(indlist, i)):
+            list_all_choice.append(list(j))
+    #从sequence中拿出repeat个数做排列（repeat关键字传参） 有放回的拿出  repeat与sequence的长度无关。
+    return list_all_choice
+
+
+def list_drop(list_dup):
+    news_list = []
+    for i in list_dup:
+        if i not in news_list:
+            news_list.append(i)
+    return news_list
+
+
+def ols_test_new(
+        y_var="profit_time",
+        x_var="",
+        str_input="firm_age amount_ini staff_ini staff_rd_ini bus_age bus_backg",
+        len_p_list=4,
+        p_value = 0.1):
+    count = 0
+    x_vars = str_out(str_input=str_input)
+    for i in x_vars:
+        #print("该模型自变量为{},因变量为{}和{}".format(y_var,x_var,','.join(i)))
+        #print(type(i))
+        str_ind = y_var + "~" + x_var + "+" + "+".join(i)
+        #print(str_ind)
+        #str_ind
+        y, X = dmatrices(str_ind, data=df, return_type='dataframe')
+
+        model = sm.OLS(y, X)
+        fit = model.fit()
+        #print(fit.pvalues)
+        #print(dir(fit))
+        #print(fit.summary())
+        p_list = list_drop(fit.pvalues)
+        par_list = list_drop(fit.params)
+        p_list = [round(i,10) for i in p_list]
+        par_list = [round(i,10) for i in par_list]
+        p_list = list_drop(p_list)
+        par_list = list_drop(par_list)
+        p_list = [round(i,3) for i in p_list]
+        par_list = [round(i,3) for i in par_list]
+        #print(p_list)
+        #print('关于自变量{}的因变量{},{},{}的回归结果P值为{}'.format(y_var, '截距项', x_var,','.join(i), p_list))
+        if all(p <= p_value for p in p_list) and len(p_list) >= len_p_list + 1:
+            count += 1
+            #print(fit.summary())
+            print('关于自变量{}的因变量:{} {} {}的回归结果P值为{},其结果在{:.2%}水平上全部显著，系数为{}'.format(
+                y_var, '截距项', x_var, ' '.join(i), p_list,p_value,par_list))
+    return int(count)
+#itertools.permutations
+#修改
+#intervening variable 中介变量
+def aggregate(y_list="staff_increase profit_time asset_net_increase",
+              x_list = "mkt_mastery gov_ser_satisf platform_help gov_support zonghesuzhi_c1 zonghesuzhi_c2 bus_resistance b c d e f g h i i1 i2 k l m n ",
+              x_control_list = "firm_age amount_ini staff_rd_ini bus_age bus_backg",
+              len_p_list=3,
+              p_value=0.01):
+    count = 0
+    
+    for y in y_list.split(' '):
+        for x in x_list.split(' '):
+            #print(y,x,x_control_list)
+            #print(x_var)
+            #print(str_input)
+            count_add = ols_test_new(y_var = y,
+                                     x_var = x,
+                                     str_input = x_control_list,
+                                     len_p_list=len_p_list,
+                                     p_value = p_value)
+            count += count_add
+
+    print("一共有{}组符合条件的回归模型".format(count))
+
+def ols_test_intervening(
+        
+        x_var="",
+        str_input="firm_age amount_ini staff_ini staff_rd_ini bus_age bus_backg",
+        len_p_list=4,
+        p_value = 0.1):
+    count = 0
+    x_vars = str_out(str_input=str_input)
+    for i in x_vars:
+        #print("该模型自变量为{},因变量为{}和{}".format(y_var,x_var,','.join(i)))
+        #print(type(i))
+        str_ind = x_var + "~" + "+" + "+".join(i)
+        #print(str_ind)
+        #str_ind
+        y, X = dmatrices(str_ind, data=df, return_type='dataframe')
+        model = sm.OLS(y, X)
+        fit = model.fit()
+        #print(fit.pvalues)
+        #print(dir(fit))
+        #print(fit.summary())
+        p_list = list_drop(fit.pvalues)
+        par_list = list_drop(fit.params)
+        p_list = [round(i,10) for i in p_list]
+        par_list = [round(i,10) for i in par_list]
+        p_list = list_drop(p_list)
+        par_list = list_drop(par_list)
+        p_list = [round(i,3) for i in p_list]
+        par_list = [round(i,3) for i in par_list]
+        #print(p_list)
+        #print('关于自变量{}的因变量{},{},{}的回归结果P值为{}'.format(y_var, '截距项', x_var,','.join(i), p_list))
+        if all(p <= p_value for p in p_list) and len(p_list) >= len_p_list + 1:
+            count += 1
+            #print(fit.summary())
+            print('关于自变量{}的因变量:{} {}的回归结果P值为{},其结果在{:.2%}水平上全部显著，系数为{}'.format(
+                x_var, '截距项', ' '.join(i), p_list,p_value,par_list))
+    return int(count)
+#itertools.permutations
+#修改
+#intervening variable 中介变量
+def aggregate_intervening(
+              x_list = "mkt_mastery",
+              x_control_list = "firm_age amount_ini staff_rd_ini bus_age bus_backg",
+              len_p_list=3,
+              p_value=0.01):
+    count = 0
+    
+
+    for x in x_list.split(' '):
+        #print(y,x,x_control_list)
+        #print(x_var)
+        #print(str_input)
+        count_add = ols_test_intervening(
+                                 x_var = x,
+                                 str_input = x_control_list,
+                                 len_p_list=len_p_list,
+                                 p_value = p_value)
+        count += count_add
+
+    print("一共有{}组符合条件的回归模型".format(count))
+    
+aggregate(y_list="staff_increase profit_time asset_net_increase",
+              x_list = "gov_support zonghesuzhi_c1 zonghesuzhi_c2 bus_resistance b c d e f g h i i1 i2 k l m n",
+              x_control_list = "firm_age amount_ini staff_ini staff_rd_ini bus_age bus_backg",
+              len_p_list=2,
+              p_value=0.05)
+aggregate_intervening(
+              x_list = "gov_support zonghesuzhi_c1 zonghesuzhi_c2 bus_resistance b c d e f g h i i1 i2 k l m n",
+              x_control_list = "firm_age amount_ini staff_ini staff_rd_ini bus_age bus_backg",
+              len_p_list=2,
+              p_value=0.05)
